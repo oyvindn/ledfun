@@ -1,54 +1,133 @@
+#define DECODE_DISTANCE_WIDTH
+#include <IRremote.hpp>
 #include <FastLED.h>
 
 // Config
 #define LED_TYPE WS2812B
 const EOrder ledColorOrder = GRB;
-const uint8_t ledDataPin = 7;
+const uint8_t ledDataPin = 39;
 const uint8_t ledCount = 60;
 const uint8_t ledBrightness = 100;
 
-const uint8_t button1Pin = 2;
-const uint8_t potentiometer1Pin = A0;
+const uint8_t IrReceiverPin = 3;
 
 // Types
 enum Mode {
+  Off,
   SingleColor,
   CycleColors,
   Cylon
+};
+
+enum Action {
+  None,
+  ToggleOnOFF,
+  ToggleMode,
+  ChangeHue
 };
 
 
 // Global varibales
 CRGB leds[ledCount];
 int mode = SingleColor;
-volatile bool button1Pressed = false;
+int lastMode = SingleColor;
+uint8_t currentHue = 0;
+Action action = None;
+uint8_t nextHue = 0;
+
 
 void setup() {
   Serial.begin(9600);
 
-  pinMode(button1Pin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(button1Pin), Button1ISR, FALLING);
-
   delay(3000);  // power-up safety delay
+  IrReceiver.begin(IrReceiverPin, ENABLE_LED_FEEDBACK);
   FastLED.addLeds<LED_TYPE, ledDataPin, ledColorOrder>(leds, ledCount).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(ledBrightness);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 2300);
 }
 
 void loop() {
-  bool modeHasChanged = ChangeModeIfButtonPressed();
+  handleIr();
+  handleActions();
 
-  int pot1Value = analogRead(potentiometer1Pin);
 
-  if (mode == SingleColor) {
-    uint8_t hue = map(pot1Value, 0, 1023, 0, 255);
-    SingleColorMode(hue, modeHasChanged);
+  bool modeHasChanged = mode != lastMode;
+
+  if (modeHasChanged && mode == Off) {
+    FastLED.clear();
+    FastLED.show();
+  } else if (mode == SingleColor) {
+    SingleColorMode(currentHue, modeHasChanged);
   } else if (mode == CycleColors) {
-    int updatesPerSecond = map(pot1Value, 0, 1023, 50, 1000);
+    int updatesPerSecond = 100;
     CycleColorsMode(updatesPerSecond);
   } else if (mode == Cylon) {
-    uint8_t hue = map(pot1Value, 0, 1023, 0, 255);
-    CylonMode(hue);
+    CylonMode(currentHue);
+  }
+
+  if (mode != Off)
+    lastMode = mode;
+}
+
+void handleIr() {
+  if (IrReceiver.decode()) {
+    Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+
+    if (action == None) {
+      switch (IrReceiver.decodedIRData.decodedRawData) {
+        case 0x1880009:
+          action = ToggleOnOFF;
+          break;
+        case 0x7880009:
+          action = ToggleMode;
+          break;
+        case 0x1820009:
+          action = ChangeHue;
+          nextHue = HUE_GREEN;
+          break;
+        case 0x7810009:
+          action = ChangeHue;
+          nextHue = HUE_YELLOW;
+          break;
+        case 0x3840009:
+          action = ChangeHue;
+          nextHue = HUE_BLUE;
+          break;
+        case 0x1ED0009:
+          action = ChangeHue;
+          nextHue = HUE_RED;
+          break;
+      }
+    }
+    IrReceiver.resume();
+  }
+}
+
+void handleActions() {
+  static unsigned long lastActionTime = 0;
+  static bool actionCooldown = false;
+  if (action != None && !actionCooldown) {
+    switch (action) {
+      case ToggleOnOFF:
+        if (mode == Off)
+          mode = lastMode;
+        else
+          mode = Off;
+        break;
+      case ToggleMode:
+        ToggleActiveMode();
+        break;
+      case ChangeHue:
+        currentHue = nextHue;
+        break;
+    }
+    lastActionTime = millis();
+    actionCooldown = true;
+  }
+
+  if (actionCooldown && (millis() - lastActionTime >= 300)) {
+    action = None;
+    actionCooldown = false;
   }
 }
 
@@ -111,35 +190,11 @@ void fadeAll() {
   for (int i = 0; i < ledCount; i++) { leds[i].nscale8(200); }
 }
 
-void Button1ISR(void) {
-  if (!button1Pressed) {
-    button1Pressed = true;
+void ToggleActiveMode() {
+  mode += 1;
+  if (mode > 3) {
+    mode = 1;
   }
-}
-
-bool ChangeModeIfButtonPressed() {
-  static unsigned long debounceStartedAtMillis = 0;
-  static bool debounceActive = false;
-
-  if (button1Pressed) {
-    button1Pressed = false;
-    debounceActive = true;
-    debounceStartedAtMillis = millis();
-  }
-
-  unsigned long currentMillis = millis();
-  if (debounceActive && (currentMillis - debounceStartedAtMillis >= 200)) {
-    debounceActive = false;
-  
-    mode += 1;
-    if (mode > 2) {
-      mode = 0;
-    }
-
-    Serial.print("Mode changed to ");
-    Serial.println(mode);
-    return true;
-  }
-
-  return false;
+  Serial.print("Mode changed to ");
+  Serial.println(mode);
 }
