@@ -6,8 +6,10 @@
 #define LED_TYPE WS2812B
 const EOrder ledColorOrder = GRB;
 const uint8_t ledDataPin = 39;
-const uint8_t ledCount = 60;
+const uint8_t ledCount = 15;
 const uint8_t ledBrightness = 100;
+const uint8_t ledVoltage = 5;
+const uint32_t maxMilliampsPowerDraw = 500;
 
 const uint8_t IrReceiverPin = 3;
 
@@ -20,7 +22,7 @@ enum Mode {
 };
 
 enum Action {
-  None,
+  Idle,
   ToggleOnOFF,
   ToggleMode,
   ChangeHue
@@ -29,10 +31,11 @@ enum Action {
 
 // Global varibales
 CRGB leds[ledCount];
-int mode = SingleColor;
-int lastMode = SingleColor;
+uint8_t currentMode = Off;
+uint8_t previousMode = SingleColor;
+bool modeHasChanged = false;
 uint8_t currentHue = 0;
-Action action = None;
+Action action = Idle;
 uint8_t nextHue = 0;
 
 
@@ -43,37 +46,33 @@ void setup() {
   IrReceiver.begin(IrReceiverPin, ENABLE_LED_FEEDBACK);
   FastLED.addLeds<LED_TYPE, ledDataPin, ledColorOrder>(leds, ledCount).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(ledBrightness);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, 2300);
+  FastLED.setMaxPowerInVoltsAndMilliamps(ledVoltage, maxMilliampsPowerDraw);
 }
 
 void loop() {
   handleIr();
   handleActions();
 
+  bool modeHasChanged = currentMode != previousMode;
 
-  bool modeHasChanged = mode != lastMode;
-
-  if (modeHasChanged && mode == Off) {
+  if (currentMode == Off && modeHasChanged) {
     FastLED.clear();
     FastLED.show();
-  } else if (mode == SingleColor) {
+  } else if (currentMode == SingleColor) {
     SingleColorMode(currentHue, modeHasChanged);
-  } else if (mode == CycleColors) {
+  } else if (currentMode == CycleColors) {
     int updatesPerSecond = 100;
     CycleColorsMode(updatesPerSecond);
-  } else if (mode == Cylon) {
+  } else if (currentMode == Cylon) {
     CylonMode(currentHue);
   }
-
-  if (mode != Off)
-    lastMode = mode;
 }
 
 void handleIr() {
   if (IrReceiver.decode()) {
     Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
 
-    if (action == None) {
+    if (action == Idle) {
       switch (IrReceiver.decodedIRData.decodedRawData) {
         case 0x1880009:
           action = ToggleOnOFF;
@@ -106,13 +105,14 @@ void handleIr() {
 void handleActions() {
   static unsigned long lastActionTime = 0;
   static bool actionCooldown = false;
-  if (action != None && !actionCooldown) {
+  if (action != Idle && !actionCooldown) {
     switch (action) {
       case ToggleOnOFF:
-        if (mode == Off)
-          mode = lastMode;
-        else
-          mode = Off;
+        if (currentMode == Off) {
+          changeMode(previousMode);
+        } else {
+          changeMode(Off);
+        }
         break;
       case ToggleMode:
         ToggleActiveMode();
@@ -126,7 +126,7 @@ void handleActions() {
   }
 
   if (actionCooldown && (millis() - lastActionTime >= 300)) {
-    action = None;
+    action = Idle;
     actionCooldown = false;
   }
 }
@@ -191,10 +191,15 @@ void fadeAll() {
 }
 
 void ToggleActiveMode() {
-  mode += 1;
-  if (mode > 3) {
-    mode = 1;
+  changeMode(currentMode + 1);
+  if (currentMode > 3) {
+    changeMode(1);
   }
+}
+
+void changeMode(uint8_t newMode) {
+  previousMode = currentMode;
+  currentMode = newMode;
   Serial.print("Mode changed to ");
-  Serial.println(mode);
+  Serial.println(currentMode);
 }
