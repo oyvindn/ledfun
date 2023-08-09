@@ -6,10 +6,10 @@
 #define LED_TYPE WS2812B
 const EOrder ledColorOrder = GRB;
 const uint8_t ledDataPin = 39;
-const uint8_t ledCount = 15;
-const uint8_t ledBrightness = 100;
+const uint8_t ledCount = 180;
+const uint8_t ledBrightness = 128;
 const uint8_t ledVoltage = 5;
-const uint32_t maxMilliampsPowerDraw = 500;
+const uint32_t maxMilliampsPowerDraw = 1500;
 
 const uint8_t IrReceiverPin = 3;
 
@@ -25,7 +25,11 @@ enum Action {
   Idle,
   ToggleOnOFF,
   ToggleMode,
-  ChangeHue
+  ChangeHue,
+  IncreaseHue,
+  DecreaseHue,
+  IncreaseBightness,
+  DecreaseBightness
 };
 
 
@@ -35,6 +39,7 @@ uint8_t currentMode = Off;
 uint8_t previousMode = SingleColor;
 bool modeHasChanged = false;
 uint8_t currentHue = 0;
+uint8_t currentBrightness = 255;
 Action action = Idle;
 uint8_t nextHue = 0;
 
@@ -49,6 +54,11 @@ void setup() {
   FastLED.setMaxPowerInVoltsAndMilliamps(ledVoltage, maxMilliampsPowerDraw);
 }
 
+// TODO
+// * Auto off
+// * Speed
+// * Blålys
+
 void loop() {
   handleIr();
   handleActions();
@@ -59,18 +69,18 @@ void loop() {
     FastLED.clear();
     FastLED.show();
   } else if (currentMode == SingleColor) {
-    SingleColorMode(currentHue, modeHasChanged);
+    SingleColorMode(currentHue, currentBrightness, modeHasChanged);
   } else if (currentMode == CycleColors) {
     int updatesPerSecond = 100;
-    CycleColorsMode(updatesPerSecond);
+    CycleColorsMode(currentBrightness, updatesPerSecond);
   } else if (currentMode == Cylon) {
-    CylonMode(currentHue);
+    CylonMode(currentHue, currentBrightness);
   }
 }
 
 void handleIr() {
   if (IrReceiver.decode()) {
-    Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+    //Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
 
     if (action == Idle) {
       switch (IrReceiver.decodedIRData.decodedRawData) {
@@ -96,6 +106,18 @@ void handleIr() {
           action = ChangeHue;
           nextHue = HUE_RED;
           break;
+        case 0x9820009:
+          action = IncreaseHue;
+          break;
+        case 0x2C50009:
+          action = DecreaseHue;
+          break;
+        case 0xF50009:
+          action = IncreaseBightness;
+          break;
+        case 0x1E20009:
+          action = DecreaseBightness;
+          break;
       }
     }
     IrReceiver.resume();
@@ -106,6 +128,8 @@ void handleActions() {
   static unsigned long lastActionTime = 0;
   static bool actionCooldown = false;
   if (action != Idle && !actionCooldown) {
+    Serial.print("Performing action: ");
+    Serial.println(action);
     switch (action) {
       case ToggleOnOFF:
         if (currentMode == Off) {
@@ -120,29 +144,59 @@ void handleActions() {
       case ChangeHue:
         currentHue = nextHue;
         break;
+      case IncreaseHue:
+        if (currentHue < 245) {
+          currentHue += 10;
+        } else {
+          currentHue = 255;
+        }
+        break;
+      case DecreaseHue:
+        if (currentHue > 10) {
+          currentHue -= 10;
+        } else {
+          currentHue = 1;
+        }
+        break;
+      case IncreaseBightness:
+        if (currentBrightness < 245) {
+          currentBrightness += 10;
+        } else {
+          currentBrightness = 255;
+        }
+        break;
+      case DecreaseBightness:
+        if (currentBrightness > 10) {
+          currentBrightness -= 10;
+        } else {
+          currentBrightness = 1;
+        }
+        break;
     }
     lastActionTime = millis();
     actionCooldown = true;
   }
 
-  if (actionCooldown && (millis() - lastActionTime >= 300)) {
+  if (actionCooldown && (millis() - lastActionTime >= 100)) {
     action = Idle;
     actionCooldown = false;
   }
 }
 
-void SingleColorMode(uint8_t hue, bool reset) {
+void SingleColorMode(uint8_t hue, uint8_t brightness, bool reset) {
   static uint8_t lastHue = 255;
-  if (reset || hue != lastHue) {
+  static uint8_t lastBrightness = 255;
+  if (reset || hue != lastHue || brightness != lastBrightness) {
     lastHue = hue;
+    lastBrightness = brightness;
     for (int i = 0; i < ledCount; i++) {
-      leds[i] = CHSV(hue, 255, 255);
+      leds[i] = CHSV(hue, 255, brightness);
     }
     FastLED.show();
   }
 }
 
-void CycleColorsMode(int updatesPerSecond) {
+void CycleColorsMode(uint8_t brightness, int updatesPerSecond) {
   static unsigned long previousMillis = millis();
   static uint8_t startHue = 0;
 
@@ -152,14 +206,14 @@ void CycleColorsMode(int updatesPerSecond) {
 
     uint8_t hue = startHue++;
     for (int i = 0; i < ledCount; i++) {
-      leds[i] = CHSV(hue, 255, 255);
+      leds[i] = CHSV(hue, 255, brightness);
       hue += 3;
     }
     FastLED.show();
   }
 }
 
-void CylonMode(uint8_t hue) {
+void CylonMode(uint8_t hue, uint8_t brightness) {
   static unsigned long previousMillis = millis();
   static uint8_t ledIndex = 0;
   static bool rising = true;
@@ -168,7 +222,7 @@ void CylonMode(uint8_t hue) {
   if (currentMillis - previousMillis >= 20) {
     previousMillis = currentMillis;
 
-    leds[ledIndex] = CHSV(hue, 255, 255);
+    leds[ledIndex] = CHSV(hue, 255, brightness);
     FastLED.show();
     fadeAll();
 
