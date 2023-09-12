@@ -6,12 +6,14 @@
 #define LED_TYPE WS2812B
 const EOrder ledColorOrder = GRB;
 const uint8_t ledDataPin = 39;
-const uint8_t ledCount = 180;
+const uint8_t ledCount = 183;
 const uint8_t ledBrightness = 128;
 const uint8_t ledVoltage = 5;
 const uint32_t maxMilliampsPowerDraw = 1500;
 
 const uint8_t IrReceiverPin = 3;
+
+const unsigned long autoTurnOffAfterIdleMillis = 30 * 60 * 1000;
 
 // Types
 enum Mode {
@@ -39,13 +41,14 @@ uint8_t currentMode = Off;
 uint8_t previousMode = SingleColor;
 bool modeHasChanged = false;
 uint8_t currentHue = 0;
+uint8_t nextHue = 0;
 uint8_t currentBrightness = 255;
 Action action = Idle;
-uint8_t nextHue = 0;
+unsigned long lastActionMillis = 0;
 
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   delay(3000);  // power-up safety delay
   IrReceiver.begin(IrReceiverPin, ENABLE_LED_FEEDBACK);
@@ -55,13 +58,13 @@ void setup() {
 }
 
 // TODO
-// * Auto off
 // * Speed
 // * Blålys
 
 void loop() {
   handleIr();
   handleActions();
+  autoOff();
 
   bool modeHasChanged = currentMode != previousMode;
 
@@ -125,7 +128,6 @@ void handleIr() {
 }
 
 void handleActions() {
-  static unsigned long lastActionTime = 0;
   static bool actionCooldown = false;
   if (action != Idle && !actionCooldown) {
     Serial.print("Performing action: ");
@@ -173,11 +175,11 @@ void handleActions() {
         }
         break;
     }
-    lastActionTime = millis();
+    lastActionMillis = millis();
     actionCooldown = true;
   }
 
-  if (actionCooldown && (millis() - lastActionTime >= 100)) {
+  if (actionCooldown && (millis() - lastActionMillis >= 100)) {
     action = Idle;
     actionCooldown = false;
   }
@@ -256,4 +258,10 @@ void changeMode(uint8_t newMode) {
   currentMode = newMode;
   Serial.print("Mode changed to ");
   Serial.println(currentMode);
+}
+
+void autoOff() {
+  if (currentMode != Off && millis() - lastActionMillis >= autoTurnOffAfterIdleMillis) {
+    changeMode(Off);
+  }
 }
