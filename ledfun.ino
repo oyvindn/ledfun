@@ -37,12 +37,15 @@ enum Action {
 
 // Global varibales
 CRGB leds[ledCount];
-uint8_t currentMode = Off;
+
+uint8_t mode = Off;
 uint8_t previousMode = SingleColor;
-bool modeHasChanged = false;
-uint8_t currentHue = 0;
+
+uint8_t hue = 0;
 uint8_t nextHue = 0;
-uint8_t currentBrightness = 255;
+
+uint8_t brightness = 255;
+
 Action action = Idle;
 unsigned long lastActionMillis = 0;
 
@@ -63,21 +66,21 @@ void setup() {
 
 void loop() {
   handleIr();
-  handleActions();
+  handleAction();
   autoOff();
 
-  bool modeHasChanged = currentMode != previousMode;
+  bool modeHasChanged = mode != previousMode;
 
-  if (currentMode == Off && modeHasChanged) {
+  if (mode == Off && modeHasChanged) {
     FastLED.clear();
     FastLED.show();
-  } else if (currentMode == SingleColor) {
-    SingleColorMode(currentHue, currentBrightness, modeHasChanged);
-  } else if (currentMode == CycleColors) {
+  } else if (mode == SingleColor) {
+    SingleColorMode(hue, brightness, modeHasChanged);
+  } else if (mode == CycleColors) {
     int updatesPerSecond = 100;
-    CycleColorsMode(currentBrightness, updatesPerSecond);
-  } else if (currentMode == Cylon) {
-    CylonMode(currentHue, currentBrightness);
+    CycleColorsMode(brightness, updatesPerSecond);
+  } else if (mode == Cylon) {
+    CylonMode(hue, brightness);
   }
 }
 
@@ -127,14 +130,14 @@ void handleIr() {
   }
 }
 
-void handleActions() {
+void handleAction() {
   static bool actionCooldown = false;
   if (action != Idle && !actionCooldown) {
     Serial.print("Performing action: ");
     Serial.println(action);
     switch (action) {
       case ToggleOnOFF:
-        if (currentMode == Off) {
+        if (mode == Off) {
           changeMode(previousMode);
         } else {
           changeMode(Off);
@@ -144,34 +147,34 @@ void handleActions() {
         ToggleActiveMode();
         break;
       case ChangeHue:
-        currentHue = nextHue;
+        hue = nextHue;
         break;
       case IncreaseHue:
-        if (currentHue < 245) {
-          currentHue += 10;
+        if (hue < 245) {
+          hue += 10;
         } else {
-          currentHue = 255;
+          hue = 255;
         }
         break;
       case DecreaseHue:
-        if (currentHue > 10) {
-          currentHue -= 10;
+        if (hue > 10) {
+          hue -= 10;
         } else {
-          currentHue = 1;
+          hue = 1;
         }
         break;
       case IncreaseBightness:
-        if (currentBrightness < 245) {
-          currentBrightness += 10;
+        if (brightness < 245) {
+          brightness += 10;
         } else {
-          currentBrightness = 255;
+          brightness = 255;
         }
         break;
       case DecreaseBightness:
-        if (currentBrightness > 10) {
-          currentBrightness -= 10;
+        if (brightness > 10) {
+          brightness -= 10;
         } else {
-          currentBrightness = 1;
+          brightness = 1;
         }
         break;
     }
@@ -247,21 +250,21 @@ void fadeAll() {
 }
 
 void ToggleActiveMode() {
-  changeMode(currentMode + 1);
-  if (currentMode > 3) {
+  changeMode(mode + 1);
+  if (mode > 3) {
     changeMode(1);
   }
 }
 
 void changeMode(uint8_t newMode) {
-  previousMode = currentMode;
-  currentMode = newMode;
+  previousMode = mode;
+  mode = newMode;
   Serial.print("Mode changed to ");
-  Serial.println(currentMode);
+  Serial.println(mode);
 }
 
 void autoOff() {
-  if (currentMode != Off && millis() - lastActionMillis >= autoTurnOffAfterIdleMillis) {
+  if (mode != Off && millis() - lastActionMillis >= autoTurnOffAfterIdleMillis) {
     changeMode(Off);
   }
 }
