@@ -31,7 +31,9 @@ enum Action {
   IncreaseHue,
   DecreaseHue,
   IncreaseBightness,
-  DecreaseBightness
+  DecreaseBightness,
+  IncreaseSpeed,
+  DecreaseSpeed
 };
 
 
@@ -45,6 +47,8 @@ uint8_t hue = 0;
 uint8_t nextHue = 0;
 
 uint8_t brightness = 255;
+
+uint8_t updatesPerSecond = 100;
 
 Action action = Idle;
 unsigned long lastActionMillis = 0;
@@ -77,52 +81,57 @@ void loop() {
   } else if (mode == SingleColor) {
     SingleColorMode(hue, brightness, modeHasChanged);
   } else if (mode == CycleColors) {
-    int updatesPerSecond = 100;
     CycleColorsMode(brightness, updatesPerSecond);
   } else if (mode == Cylon) {
-    CylonMode(hue, brightness);
+    CylonMode(hue, brightness, updatesPerSecond);
   }
 }
 
 void handleIr() {
   if (IrReceiver.decode()) {
-    //Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+    Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
 
     if (action == Idle) {
       switch (IrReceiver.decodedIRData.decodedRawData) {
         case 0x1880009:
-          action = ToggleOnOFF;
+          action = ToggleOnOFF; // Power
           break;
         case 0x7880009:
-          action = ToggleMode;
+          action = ToggleMode; // OK
           break;
-        case 0x1820009:
+        case 0x1820009: // Green
           action = ChangeHue;
           nextHue = HUE_GREEN;
           break;
-        case 0x7810009:
+        case 0x7810009: // Yellow
           action = ChangeHue;
           nextHue = HUE_YELLOW;
           break;
-        case 0x3840009:
+        case 0x3840009: // Blue
           action = ChangeHue;
           nextHue = HUE_BLUE;
           break;
-        case 0x1ED0009:
+        case 0x1ED0009: // Red
           action = ChangeHue;
           nextHue = HUE_RED;
           break;
         case 0x9820009:
-          action = IncreaseHue;
+          action = IncreaseHue; // Up
           break;
         case 0x2C50009:
-          action = DecreaseHue;
+          action = DecreaseHue; // Down
           break;
-        case 0xF50009:
+        case 0xF50009: // Vol +
           action = IncreaseBightness;
           break;
-        case 0x1E20009:
+        case 0x1E20009: // Vol -
           action = DecreaseBightness;
+          break;
+        case 0x1810009: // Prog up
+          action = IncreaseSpeed;
+          break;
+        case 0xE80009: // Prog down
+          action = DecreaseSpeed;
           break;
       }
     }
@@ -177,6 +186,20 @@ void handleAction() {
           brightness = 1;
         }
         break;
+      case IncreaseSpeed:
+        if (updatesPerSecond < 245) {
+          updatesPerSecond += 10;
+        } else {
+          updatesPerSecond = 255;
+        }
+        break;
+      case DecreaseSpeed:
+        if (updatesPerSecond > 10) {
+          updatesPerSecond -= 10;
+        } else {
+          updatesPerSecond = 1;
+        }
+        break;
     }
     lastActionMillis = millis();
     actionCooldown = true;
@@ -218,13 +241,13 @@ void CycleColorsMode(uint8_t brightness, int updatesPerSecond) {
   }
 }
 
-void CylonMode(uint8_t hue, uint8_t brightness) {
+void CylonMode(uint8_t hue, uint8_t brightness, uint8_t updatesPerSecond) {
   static unsigned long previousMillis = millis();
   static uint8_t ledIndex = 0;
   static bool rising = true;
 
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= 20) {
+  if (currentMillis - previousMillis >= (1000 / updatesPerSecond)) {
     previousMillis = currentMillis;
 
     leds[ledIndex] = CHSV(hue, 255, brightness);
