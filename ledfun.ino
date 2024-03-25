@@ -15,6 +15,10 @@ const uint8_t IrReceiverPin = 3;
 
 const unsigned long autoTurnOffAfterIdleMillis = 30 * 60 * 1000;
 
+const uint8_t step = 5;
+const uint8_t minValue = 0;
+const uint8_t maxValue = 255;
+
 // Types
 enum Mode {
   Off,
@@ -141,9 +145,11 @@ void handleIr() {
 
 void handleAction() {
   static bool actionCooldown = false;
+
   if (action != Idle && !actionCooldown) {
     Serial.print("Performing action: ");
     Serial.println(action);
+    
     switch (action) {
       case ToggleOnOFF:
         if (mode == Off) {
@@ -159,48 +165,25 @@ void handleAction() {
         hue = nextHue;
         break;
       case IncreaseHue:
-        if (hue < 245) {
-          hue += 10;
-        } else {
-          hue = 255;
-        }
+        hue = increaseValue(hue);
         break;
       case DecreaseHue:
-        if (hue > 10) {
-          hue -= 10;
-        } else {
-          hue = 1;
-        }
+        hue = decreaseValue(hue);
         break;
       case IncreaseBightness:
-        if (brightness < 245) {
-          brightness += 10;
-        } else {
-          brightness = 255;
-        }
+        brightness = increaseValue(brightness);
         break;
       case DecreaseBightness:
-        if (brightness > 10) {
-          brightness -= 10;
-        } else {
-          brightness = 1;
-        }
+        brightness = decreaseValue(brightness);
         break;
       case IncreaseSpeed:
-        if (updatesPerSecond < 245) {
-          updatesPerSecond += 10;
-        } else {
-          updatesPerSecond = 255;
-        }
+        updatesPerSecond = increaseValue(updatesPerSecond);
         break;
       case DecreaseSpeed:
-        if (updatesPerSecond > 10) {
-          updatesPerSecond -= 10;
-        } else {
-          updatesPerSecond = 1;
-        }
+        updatesPerSecond = decreaseValue(updatesPerSecond);
         break;
     }
+
     lastActionMillis = millis();
     actionCooldown = true;
   }
@@ -250,9 +233,10 @@ void CylonMode(uint8_t hue, uint8_t brightness, uint8_t updatesPerSecond) {
   if (currentMillis - previousMillis >= (1000 / updatesPerSecond)) {
     previousMillis = currentMillis;
 
+    fadeAll();
     leds[ledIndex] = CHSV(hue, 255, brightness);
     FastLED.show();
-    fadeAll();
+    
 
     if (ledIndex == (ledCount - 1)) {
       rising = false;
@@ -269,7 +253,7 @@ void CylonMode(uint8_t hue, uint8_t brightness, uint8_t updatesPerSecond) {
 }
 
 void fadeAll() {
-  for (int i = 0; i < ledCount; i++) { leds[i].nscale8(200); }
+  for (int i = 0; i < ledCount; i++) { leds[i].nscale8(230); }
 }
 
 void ToggleActiveMode() {
@@ -290,4 +274,12 @@ void autoOff() {
   if (mode != Off && millis() - lastActionMillis >= autoTurnOffAfterIdleMillis) {
     changeMode(Off);
   }
+}
+
+uint8_t increaseValue(uint8_t value) {
+  return value < (maxValue - step) ? value + step : maxValue;
+}
+
+uint8_t decreaseValue(uint8_t value) {
+  return value > (minValue + step) ? value - step : minValue;
 }
