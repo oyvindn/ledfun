@@ -6,6 +6,7 @@
 #define LED_TYPE WS2812B
 const EOrder ledColorOrder = GRB;
 const uint8_t ledDataPin = 39;
+//const uint8_t ledCount = 49; // Test LED strip
 const uint8_t ledCount = 183;
 const uint8_t ledBrightness = 128;
 const uint8_t ledVoltage = 5;
@@ -97,44 +98,44 @@ void handleIr() {
 
     if (action == Idle) {
       switch (IrReceiver.decodedIRData.decodedRawData) {
-        case 0x1880009:
+        case 0x8880008:
           action = ToggleOnOFF; // Power
           break;
-        case 0x7880009:
+        case 0x3C00008:
           action = ToggleMode; // OK
           break;
-        case 0x1820009: // Green
+        case 0x2C00008: // Green
           action = ChangeHue;
           nextHue = HUE_GREEN;
           break;
-        case 0x7810009: // Yellow
+        case 0x3880008: // Yellow
           action = ChangeHue;
           nextHue = HUE_YELLOW;
           break;
-        case 0x3840009: // Blue
+        case 0x5C00008: // Blue
           action = ChangeHue;
           nextHue = HUE_BLUE;
           break;
-        case 0x1ED0009: // Red
+        case 0xF50008: // Red
           action = ChangeHue;
           nextHue = HUE_RED;
           break;
-        case 0x9820009:
+        case 0x1880008:
           action = IncreaseHue; // Up
           break;
-        case 0x2C50009:
+        case 0x2C50008:
           action = DecreaseHue; // Down
           break;
-        case 0xF50009: // Vol +
+        case 0x790008: // Vol +
           action = IncreaseBightness;
           break;
-        case 0x1E20009: // Vol -
+        case 0x2F00008: // Vol -
           action = DecreaseBightness;
           break;
-        case 0x1810009: // Prog up
+        case 0x4C00008: // Prog up
           action = IncreaseSpeed;
           break;
-        case 0xE80009: // Prog down
+        case 0x680008: // Prog down
           action = DecreaseSpeed;
           break;
       }
